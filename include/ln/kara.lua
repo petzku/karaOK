@@ -1007,13 +1007,13 @@ lnlib = {
         end
       end
       return table.concat(tfs)
-
+    end,
+    transformRGB = function(waveR, waveG, waveB, ...)
+      lnlib.wave.transform_color(false, {waveR, waveG, waveB}, unpack(arg))
+    end,
+    transformHSL = function(waveH, waveS, waveL, ...)
+      lnlib.wave.transform_color(true, {waveH, waveS, waveL}, unpack(arg))
     end
-    -- TODO: create these shorthands?
-    -- will require restructuring, at least moving the initial definition of transform_color outside this table
-    -- transform_rgb = function(...)
-    --   transfrom_color(true, unpack(arg))
-    -- end
   },
 
   color = {
