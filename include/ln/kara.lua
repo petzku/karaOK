@@ -922,6 +922,7 @@ lnlib = {
 
     transform_color = function(formatter, waves, tags, starttime, endtime, delay, framestep, jumpToStartingPosition, dutyCycle)
       -- waves: 3-"tuple" of waves in RGB/HSL order
+      -- any numbers are instead treated as constants
       framestep = framestep or 2
       starttime = starttime or 0
       endtime = endtime or tenv.line.duration
@@ -936,6 +937,14 @@ lnlib = {
       elseif type(formatter) ~= "function" then
         -- error something idk
         aegisub.log(2, "Error in transform_color: 'formatter' must be a function or boolean\n")
+      end
+
+      for i,w in ipairs(waves) do
+        if type(w) == "number" then
+          local constWave = lnlib.wave.new()
+          constWave.addFunction(function() return w end)
+          waves[i] = constWave
+        end
       end
 
       -- 'tags' should be a table, or a string of one tag
