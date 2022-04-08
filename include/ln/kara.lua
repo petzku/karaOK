@@ -305,6 +305,49 @@ end
 local randomizer_table = {}
 local buffers = {}
 
+local function color_byRGB(r,g,b)
+  return string.format("&H%02X%02X%02X&",b,g,r)
+end
+
+local function color_byHSL(h, s, l)
+  h = h / 255
+  s = s / 255
+  l = l / 255
+  local r = 0;
+  local g = 0;
+  local b = 0;
+  --chroma
+  local c = (1 - math.abs(2 * l - 1)) * s;
+  local m = l - c / 2;
+
+  --- if not grayscale, calculate RGB
+  if h ~= nil then
+    local hu = (h%1) * 6;
+    local x = c * (1 - math.abs(hu % 2 - 1));
+    if hu < 1 then
+      r = c;
+      g = x;
+    elseif hu < 2 then
+      r = x;
+      g = c;
+    elseif hu < 3 then
+      g = c;
+      b = x;
+    elseif hu < 4 then
+      g = x;
+      b = c;
+    elseif hu < 5 then
+      r = x;
+      b = c;
+    else
+      r = c;
+      b = x;
+    end
+  end
+
+  return string.format("&H%02X%02X%02X&",255*(b+m),255*(g+m),255*(r+m))
+end
+
 lnlib = {
   init = function(tv)
     tenv = tv
@@ -871,47 +914,8 @@ lnlib = {
   },
 
   color = {
-    byRGB = function(r,g,b)
-      return string.format("&H%02X%02X%02X&",b,g,r)
-    end,
-    byHSL = function(h, s, l)
-      h = h / 255
-      s = s / 255
-      l = l / 255
-      local r = 0;
-      local g = 0;
-      local b = 0;
-      --chroma
-      local c = (1 - math.abs(2 * l - 1)) * s;
-      local m = l - c / 2;
-
-      --- if not grayscale, calculate RGB
-      if h ~= nil then
-        local hu = (h%1) * 6;
-        local x = c * (1 - math.abs(hu % 2 - 1));
-        if hu < 1 then
-          r = c;
-          g = x;
-        elseif hu < 2 then
-          r = x;
-          g = c;
-        elseif hu < 3 then
-          g = c;
-          b = x;
-        elseif hu < 4 then
-          g = x;
-          b = c;
-        elseif hu < 5 then
-          r = x;
-          b = c;
-        else
-          r = c;
-          b = x;
-        end
-      end
-
-      return string.format("&H%02X%02X%02X&",255*(b+m),255*(g+m),255*(r+m))
-    end,
+    byRGB = color_byRGB,
+    byHSL = color_byHSL,
     lumaHSL = function(h,s,l)
       if h == nil then
         return "&H000000&"
