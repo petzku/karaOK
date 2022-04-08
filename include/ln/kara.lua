@@ -264,6 +264,14 @@ local function formtagsv2(tags_with_funcs, value)
   return table.concat(tagstrings)
 end
 
+local function formcolortags(tags, values, formatter)
+  local tagstrings = {}
+    for _,t in ipairs(tags) do
+      table.insert(tagstrings, formtag(t, formatter(unpack(values))))
+    end
+  return table.concat(tagstrings)
+end
+
 local function shiftDrawing(str, x, y)
   local COORD = "%-?[%d.]+"
   local txt = str
@@ -910,7 +918,102 @@ lnlib = {
         end
       end
       return table.concat(tfs)
+    end,
+
+    transform_color = function(formatter, waves, tags, starttime, endtime, delay, framestep, jumpToStartingPosition, dutyCycle)
+      -- waves: 3-"tuple" of waves in RGB/HSL order
+      framestep = framestep or 2
+      starttime = starttime or 0
+      endtime = endtime or tenv.line.duration
+      delay = delay or 0
+      dutyCycle = dutyCycle or 1
+      if jumpToStartingPosition == nil then jumpToStartingPosition = true end
+
+      -- 'formatter' can be either nil/bool for RGB (falsy) / HSL (true)
+      -- or a directly-given formatting function
+      if type(formatter) == "nil" or type(formatter) == "boolean" then
+        formatter = formatter and color_byHSL or color_byRGB
+      elseif type(formatter) ~= "function" then
+        -- error something idk
+        aegisub.log(2, "Error in transform_color: 'formatter' must be a function or boolean\n")
+      end
+
+      -- 'tags' should be a table, or a string of one tag
+      if type(tags) == "string" then
+        tags = {tags}
+      end
+
+      local function getValues(waves, time)
+        local vs = {}
+        for _,w in ipairs(waves) do
+          table.insert(vs, w.getValue(time))
+        end
+        return vs
+      end
+      -- start, mid, end
+      local function calc_accel(wave, s, m, e)
+        local val0    = wave.getValue(s)
+        local valHalf = wave.getValue(m)
+        local val1    = wave.getValue(e)
+
+        --[[
+        -- Assumed ASS accel curve:
+        -- ratio = ((t - t0) / (t1 - t0)) ^ accel
+        -- value = val0 + (val1 - val0) * ratio
+        -- Ratio range is 0-1 so exponent just curves it.
+        -- knowns: value = valHalf
+        -- ((t - t0) / (t1 - t0)) = 0.5 since we're halfway through the timestep, so:
+        --  ratio = 0.5 ^ accel
+        -- place the knowns into the latter equation:
+        -- valHalf = val0 + (val1 - val0) * 0.5 ^ accel
+        -- (valHalf - val0) / (val1 - val0) = 0.5 ^ accel
+        -- log_0.5( (valHalf - val0) / (val1 - val0) ) = log_0.5(0.5 ^accel) = accel
+        --]]
+        local accel_unclamped = lnlib.math.log(0.5, math.abs((valHalf - val0) / (val1 - val0)))
+        return accel_unclamped
+      end
+
+      local timestep = framestep * 1000 / 23.976
+      local tfs = {}
+      local prevtags = ""
+      if jumpToStartingPosition then
+        local firsttags = formcolortags(tags, getValues(waves, starttime - delay), formatter)
+        table.insert( tfs, lnlib.tag.t(starttime, starttime + 1, 1, firsttags) )
+        prevtags = firsttags
+      end
+      for i = starttime, endtime - 1, timestep do
+        local t0 = i
+        if jumpToStartingPosition and i == starttime then
+          t0 = i + 1
+        end
+        local t1 = t0 + timestep * dutyCycle + 1
+
+        local total_accel = 0
+        local s = i - delay
+        local m = i + timestep/2 - delay
+        local e = i + timestep - delay
+
+        for _,w in ipairs(waves) do
+          total_accel = total_accel + calc_accel(w,s,m,e)
+        end
+
+        -- clamp average accel value
+        local accel = lnlib.math.clamp(total_accel / #waves, 0.01, 100);
+
+        local _tags = formcolortags(tags, getValues(waves, e), formatter)
+        if _tags ~= prevtags then
+          table.insert( tfs, lnlib.tag.t(t0, t1, accel, _tags) )
+          prevtags = _tags
+        end
+      end
+      return table.concat(tfs)
+
     end
+    -- TODO: create these shorthands?
+    -- will require restructuring, at least moving the initial definition of transform_color outside this table
+    -- transform_rgb = function(...)
+    --   transfrom_color(true, unpack(arg))
+    -- end
   },
 
   color = {
