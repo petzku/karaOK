@@ -356,6 +356,32 @@ local function color_byHSL(h, s, l)
   return string.format("&H%02X%02X%02X&",255*(b+m),255*(g+m),255*(r+m))
 end
 
+-- wave function stuff
+
+  -- start, mid, end
+local function calc_accel(wave, start_time, mid_time, end_time)
+  local val0    = wave.getValue(start_time)
+  local valHalf = wave.getValue(mid_time)
+  local val1    = wave.getValue(end_time)
+
+  --[[
+  -- Assumed ASS accel curve:
+  -- ratio = ((t - t0) / (t1 - t0)) ^ accel
+  -- value = val0 + (val1 - val0) * ratio
+  -- Ratio range is 0-1 so exponent just curves it.
+  -- knowns: value = valHalf
+  -- ((t - t0) / (t1 - t0)) = 0.5 since we're halfway through the timestep, so:
+  --  ratio = 0.5 ^ accel
+  -- place the knowns into the latter equation:
+  -- valHalf = val0 + (val1 - val0) * 0.5 ^ accel
+  -- (valHalf - val0) / (val1 - val0) = 0.5 ^ accel
+  -- log_0.5( (valHalf - val0) / (val1 - val0) ) = log_0.5(0.5 ^accel) = accel
+  --]]
+  local accel_unclamped = lnlib.math.log(0.5, math.abs((valHalf - val0) / (val1 - val0)))
+  return accel_unclamped
+end
+
+
 lnlib = {
   init = function(tv)
     tenv = tv
@@ -836,7 +862,7 @@ lnlib = {
       starttime = starttime or 0
       endtime = endtime or tenv.line.duration
       delay = delay or 0
-      
+
       local modifierFunctions
       local dutyCycle
       if argY and type(argY) == "number" then
@@ -891,27 +917,14 @@ lnlib = {
         end
         local t1 = t0 + timestep * dutyCycle + 1
 
-        local val0    = wave.getValue(i - delay)
-        local valHalf = wave.getValue(i + timestep / 2 - delay)
-        local val1    = wave.getValue(i + timestep - delay)
+        local t_start_time = i - delay
+        local t_mid_time   = i + timestep / 2 - delay
+        local t_end_time   = i + timestep - delay
 
-        --[[
-        -- Assumed ASS accel curve:
-        -- ratio = ((t - t0) / (t1 - t0)) ^ accel
-        -- value = val0 + (val1 - val0) * ratio
-        -- Ratio range is 0-1 so exponent just curves it.
-        -- knowns: value = valHalf
-        -- ((t - t0) / (t1 - t0)) = 0.5 since we're halfway through the timestep, so:
-        --  ratio = 0.5 ^ accel
-        -- place the knowns into the latter equation:
-        -- valHalf = val0 + (val1 - val0) * 0.5 ^ accel
-        -- (valHalf - val0) / (val1 - val0) = 0.5 ^ accel
-        -- log_0.5( (valHalf - val0) / (val1 - val0) ) = log_0.5(0.5 ^accel) = accel
-        --]]
-        local accel_unclamped = lnlib.math.log(0.5, math.abs((valHalf - val0) / (val1 - val0)))
+        local accel_unclamped = calc_accel(wave, t_start_time, t_mid_time, t_end_time)
         local accel = lnlib.math.clamp(accel_unclamped, 0.01, 100);
-        
-        local _tags = formtagsv2(tags, val1)
+
+        local _tags = formtagsv2(tags, wave.getValue(i + timestep - delay))
         if _tags ~= prevtags then
           table.insert( tfs, lnlib.tag.t(t0, t1, accel, _tags) )
           prevtags = _tags
@@ -959,28 +972,6 @@ lnlib = {
         end
         return vs
       end
-      -- start, mid, end
-      local function calc_accel(wave, s, m, e)
-        local val0    = wave.getValue(s)
-        local valHalf = wave.getValue(m)
-        local val1    = wave.getValue(e)
-
-        --[[
-        -- Assumed ASS accel curve:
-        -- ratio = ((t - t0) / (t1 - t0)) ^ accel
-        -- value = val0 + (val1 - val0) * ratio
-        -- Ratio range is 0-1 so exponent just curves it.
-        -- knowns: value = valHalf
-        -- ((t - t0) / (t1 - t0)) = 0.5 since we're halfway through the timestep, so:
-        --  ratio = 0.5 ^ accel
-        -- place the knowns into the latter equation:
-        -- valHalf = val0 + (val1 - val0) * 0.5 ^ accel
-        -- (valHalf - val0) / (val1 - val0) = 0.5 ^ accel
-        -- log_0.5( (valHalf - val0) / (val1 - val0) ) = log_0.5(0.5 ^accel) = accel
-        --]]
-        local accel_unclamped = lnlib.math.log(0.5, math.abs((valHalf - val0) / (val1 - val0)))
-        return accel_unclamped
-      end
 
       local timestep = framestep * 1000 / 23.976
       local tfs = {}
@@ -998,12 +989,12 @@ lnlib = {
         local t1 = t0 + timestep * dutyCycle + 1
 
         local total_accel = 0
-        local s = i - delay
-        local m = i + timestep/2 - delay
-        local e = i + timestep - delay
+        local t_start_time = i - delay
+        local t_mid_time   = i + timestep/2 - delay
+        local t_end_time   = i + timestep - delay
 
         for _,w in ipairs(waves) do
-          total_accel = total_accel + calc_accel(w,s,m,e)
+          total_accel = total_accel + calc_accel(w, t_start_time, t_mid_time, t_end_time)
         end
 
         -- clamp average accel value
