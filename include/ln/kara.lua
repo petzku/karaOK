@@ -313,49 +313,6 @@ end
 local randomizer_table = {}
 local buffers = {}
 
-local function color_byRGB(r,g,b)
-  return string.format("&H%02X%02X%02X&",b,g,r)
-end
-
-local function color_byHSL(h, s, l)
-  h = h / 255
-  s = s / 255
-  l = l / 255
-  local r = 0;
-  local g = 0;
-  local b = 0;
-  --chroma
-  local c = (1 - math.abs(2 * l - 1)) * s;
-  local m = l - c / 2;
-
-  --- if not grayscale, calculate RGB
-  if h ~= nil then
-    local hu = (h%1) * 6;
-    local x = c * (1 - math.abs(hu % 2 - 1));
-    if hu < 1 then
-      r = c;
-      g = x;
-    elseif hu < 2 then
-      r = x;
-      g = c;
-    elseif hu < 3 then
-      g = c;
-      b = x;
-    elseif hu < 4 then
-      g = x;
-      b = c;
-    elseif hu < 5 then
-      r = x;
-      b = c;
-    else
-      r = c;
-      b = x;
-    end
-  end
-
-  return string.format("&H%02X%02X%02X&",255*(b+m),255*(g+m),255*(r+m))
-end
-
 -- wave function stuff
 
   -- start, mid, end
@@ -946,7 +903,7 @@ lnlib = {
       -- 'formatter' can be either nil/bool for RGB (falsy) / HSL (true)
       -- or a directly-given formatting function
       if type(formatter) == "nil" or type(formatter) == "boolean" then
-        formatter = formatter and color_byHSL or color_byRGB
+        formatter = formatter and lnlib.color.byHSL or lnlib.color.byRGB
       elseif type(formatter) ~= "function" then
         -- error something idk
         aegisub.log(2, "Error in transform_color: 'formatter' must be a function or boolean\n")
@@ -1017,8 +974,47 @@ lnlib = {
   },
 
   color = {
-    byRGB = color_byRGB,
-    byHSL = color_byHSL,
+    byRGB = function(r,g,b)
+      return string.format("&H%02X%02X%02X&",b,g,r)
+    end,
+    byHSL = function(h, s, l)
+      h = h / 255
+      s = s / 255
+      l = l / 255
+      local r = 0;
+      local g = 0;
+      local b = 0;
+      --chroma
+      local c = (1 - math.abs(2 * l - 1)) * s;
+      local m = l - c / 2;
+
+      --- if not grayscale, calculate RGB
+      if h ~= nil then
+        local hu = (h%1) * 6;
+        local x = c * (1 - math.abs(hu % 2 - 1));
+        if hu < 1 then
+          r = c;
+          g = x;
+        elseif hu < 2 then
+          r = x;
+          g = c;
+        elseif hu < 3 then
+          g = c;
+          b = x;
+        elseif hu < 4 then
+          g = x;
+          b = c;
+        elseif hu < 5 then
+          r = x;
+          b = c;
+        else
+          r = c;
+          b = x;
+        end
+      end
+
+      return string.format("&H%02X%02X%02X&",255*(b+m),255*(g+m),255*(r+m))
+    end,
     lumaHSL = function(h,s,l)
       if h == nil then
         return "&H000000&"
